@@ -1,0 +1,9 @@
+[submodule "clog"]
+	path = clog
+	url = https://github.com/LordOfTrident/clog
+[submodule "cargs"]
+	path = cargs
+	url = https://github.com/LordOfTrident/cargs
+[submodule "cfs"]
+	path = cfs
+	url = https://github.com/LordOfTrident/cfs
