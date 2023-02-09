@@ -39,13 +39,9 @@ void prepare(void) {
 }
 
 char *build_file(const char *name) {
-	size_t len = strlen(name);
-	char  *str = (char*)malloc(len + 1);
+	char *str = fs_replace_ext(name, "o"); /* Change *.c to *.o */
 	if (str == NULL)
 		LOG_FATAL("malloc() fail");
-
-	strcpy(str, name);
-	str[len - 1] = 'o'; /* Change *.c to *.o */
 
 	char *out = FS_JOIN_PATH(BIN, str);
 	char *src = FS_JOIN_PATH(SRC, name);
