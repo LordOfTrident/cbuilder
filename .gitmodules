@@ -1,9 +1,9 @@
-[submodule "clog"]
-	path = clog
-	url = https://github.com/LordOfTrident/clog
-[submodule "cargs"]
-	path = cargs
-	url = https://github.com/LordOfTrident/cargs
-[submodule "cfs"]
-	path = cfs
+[submodule "lib/cfs"]
+	path = lib/cfs
 	url = https://github.com/LordOfTrident/cfs
+[submodule "lib/cargs"]
+	path = lib/cargs
+	url = https://github.com/LordOfTrident/cargs
+[submodule "lib/clog"]
+	path = lib/clog
+	url = https://github.com/LordOfTrident/clog

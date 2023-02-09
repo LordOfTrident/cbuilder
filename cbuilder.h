@@ -17,9 +17,9 @@ extern "C" {
 #include <assert.h> /* assert */
 #include <stdlib.h> /* exit, EXIT_FAILURE, EXIT_SUCCESS, malloc */
 
-#include "clog/clog.h"
-#include "cargs/cargs.h"
-#include "cfs/cfs.h"
+#include "lib/clog/clog.h"
+#include "lib/cargs/cargs.h"
+#include "lib/cfs/cfs.h"
 
 #define CBUILDER_VERSION_MAJOR 1
 #define CBUILDER_VERSION_MINOR 0
@@ -94,13 +94,13 @@ extern "C" {
 #endif
 
 #define CLOG_IMPLEMENTATION
-#include "clog/clog.h"
+#include "lib/clog/clog.h"
 
 #define CARGS_IMPLEMENTATION
-#include "cargs/cargs.h"
+#include "lib/cargs/cargs.h"
 
 #define CFS_IMPLEMENTATION
-#include "cfs/cfs.h"
+#include "lib/cfs/cfs.h"
 
 static bool _build_help = false;
 static bool _build_ver  = false;
