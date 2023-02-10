@@ -23,7 +23,7 @@ extern "C" {
 
 #define CBUILDER_VERSION_MAJOR 1
 #define CBUILDER_VERSION_MINOR 0
-#define CBUILDER_VERSION_PATCH 0
+#define CBUILDER_VERSION_PATCH 1
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 #	define BUILD_PLATFORM_WINDOWS
@@ -183,7 +183,7 @@ void cmd(const char **argv) {
 		int status;
 		pid_ = wait(&status);
 		if (status != 0)
-			LOG_ERROR("Command '%s' exited with exitcode '%i'", argv[0], status);
+			LOG_FATAL("Command '%s' exited with exitcode '%i'", argv[0], status);
 	}
 }
 
