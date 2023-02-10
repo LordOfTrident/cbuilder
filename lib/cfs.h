@@ -19,7 +19,7 @@ extern "C" {
 
 #define CFS_VERSION_MAJOR 1
 #define CFS_VERSION_MINOR 6
-#define CFS_VERSION_PATCH 1
+#define CFS_VERSION_PATCH 2
 
 #ifndef WIN32
 #	if defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
@@ -135,8 +135,8 @@ int fs_create_dir( const char *path);
 int fs_remove_file(const char *path);
 int fs_remove_dir( const char *path);
 
-int fs_copy(const char *path, const char *new_);
-int fs_move(const char *path, const char *new_);
+int fs_copy_file(const char *path, const char *new_);
+int fs_move_file(const char *path, const char *new_);
 
 int fs_dir_open( fs_dir_t *d, const char *path);
 int fs_dir_close(fs_dir_t *d);
@@ -330,10 +330,15 @@ int fs_remove_file(const char *path) {
 #endif
 }
 
-int fs_copy(const char *path, const char *new_) {
+int fs_copy_file(const char *path, const char *new_) {
 #ifdef WIN32
-	return !CopyFileA(path, new_, true)? -1 : 0;
+	return !CopyFileA(path, new_, false)? -1 : 0;
 #else
+	if (fs_exists(new_)) {
+		if (fs_remove_file(new_) != 0)
+			return -1;
+	}
+
 	/* https://stackoverflow.com/questions/2180079/how-can-i-copy-a-file-on-unix-using-c */
 	int to, from;
 
@@ -384,7 +389,7 @@ int fs_copy(const char *path, const char *new_) {
 #endif
 }
 
-int fs_move(const char *path, const char *new_) {
+int fs_move_file(const char *path, const char *new_) {
 #ifdef WIN32
 	return !MoveFileA(path, new_)? -1 : 0;
 #else
