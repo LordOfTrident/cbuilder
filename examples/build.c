@@ -38,7 +38,7 @@ void prepare(void) {
 	EMBED(); /* Macro from 'embeds.h' to create the embeds */
 }
 
-char *build_file(build_cache_t *c, const char *name) {
+char *build_file(build_cache_t *c, const char *name, bool rebuild_all) {
 	char *str = fs_replace_ext(name, "o"); /* Change *.c to *.o */
 	if (str == NULL)
 		LOG_FAIL("malloc()");
@@ -57,7 +57,7 @@ char *build_file(build_cache_t *c, const char *name) {
 
 	/* Check the cache to see if the last modified time changed */
 	int64_t cached_m = build_cache_get(c, src);
-	if (m == cached_m) { /* If it did not, return, otherwise rebuild */
+	if (m == cached_m && !rebuild_all) { /* If it did not, return, otherwise rebuild */
 		free(src);
 		return out;
 	}
@@ -82,14 +82,37 @@ void build(void) {
 	if (build_cache_load(&c) != 0)
 		LOG_FATAL("Build cache is corrupted");
 
+	bool rebuild_all = false;
+
 	int status;
+	FOREACH_IN_DIR(SRC, dir, ent, {
+		if (strcmp(fs_ext(ent.name), "h") != 0)
+			continue;
+
+		char *src = FS_JOIN_PATH(SRC, ent.name);
+		if (src == NULL)
+			LOG_FAIL("malloc()");
+
+		int64_t m;
+		if (fs_time(src, &m, NULL) != 0)
+			LOG_FATAL("Failed to get last modified time of file '%s'", src);
+
+		int64_t cached_m = build_cache_get(&c, src);
+		if (m != cached_m) {
+			build_cache_set(&c, src, m);
+
+			rebuild_all = true;
+			break;
+		}
+	}, status);
+
 	FOREACH_IN_DIR(SRC, dir, ent, {
 		if (strcmp(fs_ext(ent.name), "c") != 0)
 			continue;
 
 		assert(o_files_count < sizeof(o_files) / sizeof(o_files[0]));
 
-		char *out = build_file(&c, ent.name);
+		char *out = build_file(&c, ent.name, rebuild_all);
 		o_files[o_files_count ++] = out;
 	}, status);
 
@@ -99,15 +122,11 @@ void build(void) {
 	if (build_cache_save(&c) != 0)
 		LOG_FATAL("Failed to save build cache");
 
-	if (o_files_count == 0)
-		LOG_INFO("Nothing to rebuild");
-	else {
-		/* For compiling a variable list of files, we use the COMPILE macro */
-		COMPILE(cc, o_files, o_files_count, "-o", BIN"/"OUT, CARGS);
+	/* For compiling a variable list of files, we use the COMPILE macro */
+	COMPILE(cc, o_files, o_files_count, "-o", BIN"/"OUT, CARGS);
 
-		for (size_t i = 0; i < o_files_count; ++ i)
-			free(o_files[i]);
-	}
+	for (size_t i = 0; i < o_files_count; ++ i)
+		free(o_files[i]);
 
 	build_cache_free(&c);
 }
