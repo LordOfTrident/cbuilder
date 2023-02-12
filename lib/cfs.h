@@ -16,9 +16,10 @@ extern "C" {
 #include <string.h>  /* strlen, strcpy, memcpy, strcat, memset */
 #include <stdlib.h>  /* malloc */
 #include <stdarg.h>  /* va_list, va_start, va_end, va_arg */
+#include <stdint.h>  /* int64_t */
 
 #define CFS_VERSION_MAJOR 1
-#define CFS_VERSION_MINOR 6
+#define CFS_VERSION_MINOR 7
 #define CFS_VERSION_PATCH 2
 
 #ifndef WIN32
@@ -119,6 +120,7 @@ typedef struct {
 #define FS_JOIN_PATH(...) fs_join_path(__VA_ARGS__, NULL)
 char *fs_join_path(const char *base, ...);
 
+int         fs_time(    const char *path, int64_t *m, int64_t *a);
 int         fs_attr(    const char *path);
 const char *fs_basename(const char *path);
 const char *fs_ext(     const char *path);
@@ -207,6 +209,54 @@ const char *fs_ext(const char *path) {
 			return path + i + 1;
 	}
 	return path;
+}
+
+#ifdef WIN32
+uint64_t fs_file_time_to_unix(FILETIME ft) {
+}
+#endif
+
+int fs_time(const char *path, int64_t *m, int64_t *a) {
+#ifdef WIN32
+#	define _UNIX_TIME_START  0x019DB1DED53E8000
+#	define _TICKS_PER_SECOND 10000000
+
+	HANDLE f = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+	if (f == INVALID_HANDLE_VALUE)
+		return -1;
+
+	FILETIME create, access, modif;
+	(void)create;
+	if (!GetFileTime(f, &create, &access, &modif))
+		return -1;
+
+	LARGE_INTEGER li;
+
+	if (m != NULL) {
+		li.LowPart  = modif.dwLowDateTime;
+		li.HighPart = modif.dwHighDateTime;
+		*m = (int64_t)(li.QuadPart - _UNIX_TIME_START) / _TICKS_PER_SECOND;
+	}
+
+	if (a != NULL) {
+		li.LowPart  = access.dwLowDateTime;
+		li.HighPart = access.dwHighDateTime;
+		*a = (int64_t)(li.QuadPart - _UNIX_TIME_START) / _TICKS_PER_SECOND;
+	}
+
+	return 0;
+#else
+	struct stat s;
+	if (stat(path, &s) != 0)
+		return -1;
+
+	if (m != NULL)
+		*m = (int64_t)s.st_mtime;
+	if (a != NULL)
+		*a = (int64_t)s.st_atime;
+#endif
+
+	return 0;
 }
 
 int fs_attr(const char *path) {

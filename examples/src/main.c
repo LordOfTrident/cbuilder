@@ -1,4 +1,4 @@
-#include <stdio.h> /* printf */
+#include "print_lines.h"
 
 /* defines embed paths macros (EMBED_HELLO_TXT) */
 #include "../embeds.h"
@@ -10,8 +10,6 @@
 #define ARRAY_SIZE(ARRAY) (sizeof(ARRAY) / sizeof(ARRAY[0]))
 
 int main(void) {
-	for (size_t i = 0; i < ARRAY_SIZE(embed_hello_txt); ++ i)
-		printf("%s\n", embed_hello_txt[i]);
-
+	print_lines(embed_hello_txt, ARRAY_SIZE(embed_hello_txt));
 	return 0;
 }

@@ -19,6 +19,8 @@ and other build systems, heavily inspired by [nobuild](https://github.com/tsodin
 ## Table of contents
 * [Features](#features)
 * [Simple example](#simple-example)
+* [Documentation](#documentation)
+* [Using cbuilder](#using-cbuilder)
 * [Quickstart](#quickstart)
 * [Bugs](#bugs)
 
@@ -50,6 +52,12 @@ int main(int argc, const char **argv) {
 	return 0;
 }
 ```
+
+## Documentation
+Coming soon
+
+## Using cbuilder
+Example project using cbuilder is [tokiscript](https://github.com/LordOfTrident/tokiscript)
 
 ## Quickstart
 Submodule this repository, or copy the entire folder into your project. Create a `build.c` file,

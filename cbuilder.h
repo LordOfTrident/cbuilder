@@ -12,17 +12,18 @@
 extern "C" {
 #endif
 
-#include <stdio.h>  /* stderr, fprintf, fopen, fclose, fgetc, EOF */
+#include <stdio.h>  /* FILE, stderr, fprintf, fopen, fclose, fgetc, EOF */
 #include <stdarg.h> /* va_list, va_start, va_end, vsnprintf */
 #include <assert.h> /* assert */
-#include <stdlib.h> /* exit, EXIT_FAILURE, EXIT_SUCCESS, malloc */
+#include <stdlib.h> /* exit, EXIT_FAILURE, EXIT_SUCCESS, malloc, realloc, free, atoll */
+#include <string.h> /* strcmp, memcpy */
 
 #include "lib/clog.h"
 #include "lib/cargs.h"
 #include "lib/cfs.h"
 
 #define CBUILDER_VERSION_MAJOR 1
-#define CBUILDER_VERSION_MINOR 0
+#define CBUILDER_VERSION_MINOR 2
 #define CBUILDER_VERSION_PATCH 1
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
@@ -51,12 +52,35 @@ extern "C" {
 #	define CXX "c++"
 #endif
 
-#define BUILD_APP_NAME "./build"
+#define BUILD_APP_NAME   "./build"
+#define BUILD_CACHE_PATH ".cbuilder-cache"
 
 void build_set_usage(const char *usage);
 void build_parse_args(args_t *a, args_t *stripped);
 
 void build_arg_error(const char *fmt, ...);
+
+typedef struct {
+	char   *path;
+	int64_t mtime;
+} build_cache_item_t;
+
+typedef struct {
+	build_cache_item_t *buf;
+	size_t              count, size;
+} build_cache_t;
+
+int  build_cache_delete(void);
+int  build_cache_load(build_cache_t *c);
+int  build_cache_save(build_cache_t *c);
+void build_cache_free(build_cache_t *c);
+
+void    build_cache_set(build_cache_t *c, const char *path, int64_t mtime);
+int64_t build_cache_get(build_cache_t *c, const char *path);
+
+#define LOG_FAIL(...) \
+	(log_set_flags(LOG_LOC | LOG_TIME), \
+	 LOG_FATAL("Failed at "__VA_ARGS__))
 
 #define CMD(NAME, ...) \
 	do { \
@@ -140,7 +164,7 @@ void build_parse_args(args_t *a, args_t *stripped) {
 	int err = args_parse_flags(a, &where, stripped);
 	if (err != ARG_OK) {
 		switch (err) {
-		case ARG_OUT_OF_MEM:    assert(0 && "malloc() fail");
+		case ARG_OUT_OF_MEM:    LOG_FAIL("malloc()");
 		case ARG_UNKNOWN:       build_arg_error("Unknown flag '%s'", a->v[where]);            break;
 		case ARG_MISSING_VALUE: build_arg_error("Flag '%s' is a missing value", a->v[where]); break;
 
@@ -174,11 +198,11 @@ void cmd(const char **argv) {
 	pid_t pid_ = fork();
 	if (pid_ == 0) {
 		if (execvp(argv[0], (char**)argv) == -1)
-			LOG_FATAL("execvp() fail");
+			LOG_FAIL("execvp()");
 
 		exit(EXIT_SUCCESS);
 	} else if (pid_ == -1)
-		LOG_FATAL("fork() fail");
+		LOG_FAIL("fork()");
 	else {
 		int status;
 		pid_ = wait(&status);
@@ -191,7 +215,7 @@ void compile(const char *compiler, const char **srcs, size_t srcs_count,
              const char **args, size_t args_count) {
 	const char **argv = (const char**)malloc((srcs_count + args_count + 2) * sizeof(*argv));
 	if (argv == NULL)
-		LOG_FATAL("malloc() fail");
+		LOG_FAIL("malloc()");
 
 	argv[0] = compiler;
 	size_t pos = 1;
@@ -284,6 +308,114 @@ void embed(const char *path, const char *out, int type) {
 
 	fclose(o);
 	fclose(f);
+}
+
+static build_cache_item_t *build_cache_add(build_cache_t *c) {
+	++ c->count;
+	if (c->count >= c->size) {
+		c->size *= 2;
+		void *ptr = realloc(c->buf, c->size * sizeof(*c->buf));
+		if (ptr == NULL) {
+			free(c->buf);
+			LOG_FAIL("realloc()");
+		} else
+			c->buf = (build_cache_item_t*)ptr;
+	}
+
+	return &c->buf[c->count - 1];
+}
+
+int build_cache_delete(void) {
+	return fs_remove_file(BUILD_CACHE_PATH);
+}
+
+int build_cache_load(build_cache_t *c) {
+	c->count = 0;
+	c->size  = 16;
+	c->buf   = (build_cache_item_t*)malloc(c->size * sizeof(*c->buf));
+	if (c->buf == NULL)
+		LOG_FAIL("malloc()");
+
+	FILE *f = fopen(BUILD_CACHE_PATH, "r");
+	if (f != NULL) {
+		char line[PATH_MAX] = {0};
+		while (fgets(line, PATH_MAX, f) != NULL) {
+			size_t line_len = strlen(line);
+			if (line[line_len - 1] == '\n')
+				line[line_len - 1] = '\0';
+
+			if (line[0] != '"')
+				return -1;
+
+			size_t len = 0;
+			for (; line[len + 1] != '"'; ++ len) {
+				if (line[len + 1] == '\0')
+					return -1;
+			}
+
+			build_cache_item_t *item = build_cache_add(c);
+			item->path = (char*)malloc(len + 1);
+			if (item->path == NULL)
+				LOG_FAIL("malloc()");
+
+			memcpy(item->path, line + 1, len);
+			item->path[len] = '\0';
+
+			char *num   = line + len + 3;
+			item->mtime = (int64_t)atoll(num);
+		}
+
+		fclose(f);
+	}
+	return 0;
+}
+
+int build_cache_save(build_cache_t *c) {
+	FILE *f = fopen(BUILD_CACHE_PATH, "w");
+	if (f == NULL)
+		return -1;
+
+	for (size_t i = 0; i < c->count; ++ i)
+		fprintf(f, "\"%s\" %llu\n", c->buf[i].path, (unsigned long long)c->buf[i].mtime);
+
+	fclose(f);
+	return 0;
+}
+
+void build_cache_free(build_cache_t *c) {
+	for (size_t i = 0; i < c->count; ++ i)
+		free(c->buf[i].path);
+
+	free(c->buf);
+	c->buf   = NULL;
+	c->count = 0;
+	c->size  = 0;
+}
+
+void build_cache_set(build_cache_t *c, const char *path, int64_t mtime) {
+	for (size_t i = 0; i < c->count; ++ i) {
+		if (strcmp(c->buf[i].path, path) == 0) {
+			c->buf[i].mtime = mtime;
+			return;
+		}
+	}
+
+	build_cache_item_t *item = build_cache_add(c);
+	item->path = (char*)malloc(strlen(path) + 1);
+	if (item->path == NULL)
+		LOG_FAIL("malloc()");
+
+	strcpy(item->path, path);
+	item->mtime = mtime;
+}
+
+int64_t build_cache_get(build_cache_t *c, const char *path) {
+	for (size_t i = 0; i < c->count; ++ i) {
+		if (strcmp(c->buf[i].path, path) == 0)
+			return c->buf[i].mtime;
+	}
+
+	return (int64_t)-1;
 }
 
 #ifdef __cplusplus

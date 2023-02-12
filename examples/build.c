@@ -38,17 +38,31 @@ void prepare(void) {
 	EMBED(); /* Macro from 'embeds.h' to create the embeds */
 }
 
-char *build_file(const char *name) {
+char *build_file(build_cache_t *c, const char *name) {
 	char *str = fs_replace_ext(name, "o"); /* Change *.c to *.o */
 	if (str == NULL)
-		LOG_FATAL("malloc() fail");
+		LOG_FAIL("malloc()");
 
 	char *out = FS_JOIN_PATH(BIN, str);
 	char *src = FS_JOIN_PATH(SRC, name);
 	if (src == NULL || out == NULL)
-		LOG_FATAL("malloc() fail");
+		LOG_FAIL("malloc()");
 
 	free(str);
+
+	/* Get the file last modified time */
+	int64_t m;
+	if (fs_time(src, &m, NULL) != 0)
+		LOG_FATAL("Failed to get last modified time of file '%s'", src);
+
+	/* Check the cache to see if the last modified time changed */
+	int64_t cached_m = build_cache_get(c, src);
+	if (m == cached_m) { /* If it did not, return, otherwise rebuild */
+		free(src);
+		return out;
+	}
+
+	build_cache_set(c, src, m);
 
 	/* Compile the object file */
 	CMD(cc, "-c", src, "-o", out, CARGS);
@@ -62,6 +76,12 @@ void build(void) {
 	char  *o_files[32];
 	size_t o_files_count = 0;
 
+	/* Build cache for optimized building */
+	build_cache_t c; /* Cache is stored in BUILD_CACHE_PATH, which is ".cbuilder-cache". Dont
+	                    forget to put this path into .gitignore if youre using git */
+	if (build_cache_load(&c) != 0)
+		LOG_FATAL("Build cache is corrupted");
+
 	int status;
 	FOREACH_IN_DIR(SRC, dir, ent, {
 		if (strcmp(fs_ext(ent.name), "c") != 0)
@@ -69,18 +89,27 @@ void build(void) {
 
 		assert(o_files_count < sizeof(o_files) / sizeof(o_files[0]));
 
-		char *out = build_file(ent.name);
+		char *out = build_file(&c, ent.name);
 		o_files[o_files_count ++] = out;
 	}, status);
 
 	if (status != 0)
 		LOG_FATAL("Failed to open directory '%s'", SRC);
 
-	/* For compiling a variable list of files, we use the COMPILE macro */
-	COMPILE(cc, o_files, o_files_count, "-o", BIN"/"OUT, CARGS);
+	if (build_cache_save(&c) != 0)
+		LOG_FATAL("Failed to save build cache");
 
-	for (size_t i = 0; i < o_files_count; ++ i)
-		free(o_files[i]);
+	if (o_files_count == 0)
+		LOG_INFO("Nothing to rebuild");
+	else {
+		/* For compiling a variable list of files, we use the COMPILE macro */
+		COMPILE(cc, o_files, o_files_count, "-o", BIN"/"OUT, CARGS);
+
+		build_cache_free(&c);
+
+		for (size_t i = 0; i < o_files_count; ++ i)
+			free(o_files[i]);
+	}
 }
 
 void clean(void) {
@@ -96,7 +125,7 @@ void clean(void) {
 
 		char *path = FS_JOIN_PATH(dir.path, ent.name);
 		if (path == NULL)
-			LOG_FATAL("malloc() fail");
+			LOG_FAIL("malloc()");
 
 		fs_remove_file(path);
 
@@ -105,6 +134,8 @@ void clean(void) {
 
 	if (status != 0)
 		LOG_FATAL("Failed to open directory '%s'", SRC);
+
+	build_cache_delete();
 
 	if (!found)
 		LOG_ERROR("Nothing to clean");
