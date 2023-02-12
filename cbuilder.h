@@ -23,7 +23,7 @@ extern "C" {
 #include "cfs.h"
 
 #define CBUILDER_VERSION_MAJOR 1
-#define CBUILDER_VERSION_MINOR 2
+#define CBUILDER_VERSION_MINOR 3
 #define CBUILDER_VERSION_PATCH 1
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
@@ -104,6 +104,9 @@ enum {
 };
 
 void embed(const char *path, const char *out, int type);
+
+void build_clean(const char *path);
+void build(const char *cc, const char **srcs, size_t srcs_count, const char *bin, const char *out);
 
 #ifdef __cplusplus
 }
@@ -416,6 +419,138 @@ int64_t build_cache_get(build_cache_t *c, const char *path) {
 	}
 
 	return (int64_t)-1;
+}
+
+void build_clean(const char *path) {
+	bool found = false;
+	int  status;
+	FOREACH_IN_DIR(path, dir, ent, {
+		if (strcmp(fs_ext(ent.name), "o") != 0)
+			continue;
+
+		if (!found)
+			found = true;
+
+		char *path = FS_JOIN_PATH(dir.path, ent.name);
+		if (path == NULL)
+			LOG_FAIL("malloc()");
+
+		fs_remove_file(path);
+		free(path);
+	}, status);
+
+	if (status != 0)
+		LOG_FATAL("Failed to open directory '%s'", path);
+
+	build_cache_delete();
+
+	if (!found)
+		LOG_INFO("Nothing to clean");
+	else
+		LOG_INFO("Cleaned '%s'", path);
+}
+
+#ifndef CARGS
+#	define CARGS
+#endif
+
+#ifndef CLIBS
+#	define CLIBS
+#endif
+
+static char *build_file(const char *cc, build_cache_t *c, const char *out_dir, const char *src_dir,
+                        const char *src_name, bool force_rebuild) {
+	char *out_name = fs_replace_ext(src_name, "o");
+	if (out_name == NULL)
+		LOG_FAIL("malloc()");
+
+	char *out = FS_JOIN_PATH(out_dir, out_name);
+	char *src = FS_JOIN_PATH(src_dir, src_name);
+	if (out_name == NULL || out == NULL || src == NULL)
+		LOG_FAIL("malloc()");
+
+	free(out_name);
+
+	int64_t m_cached = build_cache_get(c, src);
+	int64_t m_now;
+	if (fs_time(src, &m_now, NULL) != 0)
+		LOG_FATAL("Could not get last modified time of '%s'", src);
+
+	if (m_cached != m_now || force_rebuild) {
+		build_cache_set(c, src, m_now);
+		CMD(cc, "-c", src, "-o", out, CARGS);
+	}
+
+	free(src);
+	return out;
+}
+
+void build(const char *cc, const char **srcs, size_t srcs_count, const char *bin, const char *out) {
+	if (!fs_exists(bin))
+		fs_create_dir(bin);
+
+	char  *o_files[128];
+	size_t o_files_count = 0;
+
+	build_cache_t c;
+	if (build_cache_load(&c) != 0)
+		LOG_FATAL("Build cache is corrupted");
+
+	bool rebuild_all = false;
+
+	for (size_t i = 0; i < srcs_count; ++ i) {
+		int status;
+		FOREACH_IN_DIR(srcs[i], dir, ent, {
+			if (strcmp(fs_ext(ent.name), "h") != 0)
+				continue;
+
+			char *src = FS_JOIN_PATH(srcs[i], ent.name);
+			if (src == NULL)
+				LOG_FAIL("malloc()");
+
+			int64_t m_cached = build_cache_get(&c, src);
+			int64_t m_now;
+			if (fs_time(src, &m_now, NULL) != 0)
+				LOG_FATAL("Could not get last modified time of '%s'", src);
+
+			if (!rebuild_all && m_cached != m_now) {
+				rebuild_all = true;
+				build_cache_set(&c, src, m_now);
+			}
+
+			free(src);
+		}, status);
+
+		if (status != 0)
+			LOG_FATAL("Failed to open directory '%s'", srcs[i]);
+
+		FOREACH_IN_DIR(srcs[i], dir, ent, {
+			if (strcmp(fs_ext(ent.name), "c") != 0)
+				continue;
+
+			assert(o_files_count < sizeof(o_files) / sizeof(o_files[0]));
+
+			char *out = build_file(cc, &c, bin, srcs[i], ent.name, rebuild_all);
+			o_files[o_files_count ++] = out;
+		}, status);
+
+		if (status != 0)
+			LOG_FATAL("Failed to open directory '%s'", srcs[i]);
+	}
+
+	if (o_files_count == 0)
+		LOG_INFO("Nothing to rebuild");
+	else {
+		if (build_cache_save(&c) != 0)
+			LOG_FATAL("Failed to save build cache");
+
+		COMPILE(cc, o_files, o_files_count, "-o", out, CARGS, CLIBS);
+
+		for (size_t i = 0; i < o_files_count; ++ i)
+			free(o_files[i]);
+	}
+
+	build_cache_free(&c);
 }
 
 #ifdef __cplusplus
