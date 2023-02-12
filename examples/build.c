@@ -100,10 +100,7 @@ void build(void) {
 		int64_t cached_m = build_cache_get(&c, src);
 		if (m != cached_m) {
 			build_cache_set(&c, src, m);
-			free(src);
-
 			rebuild_all = true;
-			break;
 		}
 
 		free(src);
