@@ -105,11 +105,11 @@ void build(void) {
 		/* For compiling a variable list of files, we use the COMPILE macro */
 		COMPILE(cc, o_files, o_files_count, "-o", BIN"/"OUT, CARGS);
 
-		build_cache_free(&c);
-
 		for (size_t i = 0; i < o_files_count; ++ i)
 			free(o_files[i]);
 	}
+
+	build_cache_free(&c);
 }
 
 void clean(void) {
