@@ -7,3 +7,4 @@
 - `1.1.1`: Add LOG_FAIL
 - `1.2.1`: Add build cache
 - `1.3.1`: Add build_clean and build to shorten build.c code
+- `1.3.2`: Fix build_clean and build

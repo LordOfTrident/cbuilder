@@ -24,7 +24,7 @@ extern "C" {
 
 #define CBUILDER_VERSION_MAJOR 1
 #define CBUILDER_VERSION_MINOR 3
-#define CBUILDER_VERSION_PATCH 1
+#define CBUILDER_VERSION_PATCH 2
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
 #	define BUILD_PLATFORM_WINDOWS
@@ -513,8 +513,10 @@ void build(const char *cc, const char **srcs, size_t srcs_count, const char *bin
 			if (fs_time(src, &m_now, NULL) != 0)
 				LOG_FATAL("Could not get last modified time of '%s'", src);
 
-			if (!rebuild_all && m_cached != m_now) {
-				rebuild_all = true;
+			if (m_cached != m_now) {
+				if (!rebuild_all)
+					rebuild_all = true;
+
 				build_cache_set(&c, src, m_now);
 			}
 
