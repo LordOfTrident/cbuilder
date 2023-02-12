@@ -106,6 +106,9 @@ void build(void) {
 		}
 	}, status);
 
+	if (status != 0)
+		LOG_FATAL("Failed to open directory '%s'", SRC);
+
 	FOREACH_IN_DIR(SRC, dir, ent, {
 		if (strcmp(fs_ext(ent.name), "c") != 0)
 			continue;
