@@ -30,7 +30,8 @@ and other build systems, heavily inspired by [nobuild](https://github.com/tsodin
 - [X] CMD macro to run a command
 - [X] COMPILE macro to pass given files into a command
 - [X] System for embedding files into C source code
-- [ ] A system detecting which files were modified since last build
+- [X] A system detecting which files were modified since last build
+- [ ] Rebuild when a header gets modified
 - [ ] Rebuilding itself
 - [ ] Including files over http
 
